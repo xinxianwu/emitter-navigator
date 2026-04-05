@@ -18,6 +18,7 @@
     </actions>
 
     <extensions defaultExtensionNs="com.intellij">
+        <gotoDeclarationHandler implementation="com.github.xinxianwu.emitternavigator.navigation.EmitterGotoDeclarationHandler"/>
         <toolWindow factoryClass="com.github.xinxianwu.emitternavigator.toolWindow.MyToolWindowFactory" id="MyToolWindow"/>
         <postStartupActivity implementation="com.github.xinxianwu.emitternavigator.startup.MyProjectActivity" />
     </extensions>
