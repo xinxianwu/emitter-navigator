@@ -1,5 +1,6 @@
 package com.github.xinxianwu.emitternavigator.navigation
 
+import com.github.xinxianwu.emitternavigator.settings.EmitterNavigatorSettings
 import com.intellij.codeInsight.navigation.actions.GotoDeclarationHandler
 import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.fileEditor.FileDocumentManager
@@ -10,8 +11,9 @@ import com.intellij.psi.search.GlobalSearchScope
 
 class EmitterGotoDeclarationHandler : GotoDeclarationHandler {
 
-    private val emitMethods = setOf("emit", "trigger", "fire")
-    private val onMethods   = setOf("on", "once", "addListener")
+    private val settings get() = EmitterNavigatorSettings.instance
+    private val emitMethods get() = settings.emitMethodSet
+    private val onMethods   get() = settings.onMethodSet
 
     override fun getGotoDeclarationTargets(
         sourceElement: PsiElement?,
@@ -50,8 +52,8 @@ class EmitterGotoDeclarationHandler : GotoDeclarationHandler {
         for (ext in listOf("js", "ts", "jsx", "tsx", "vue")) {
             for (vFile in FilenameIndex.getAllFilesByExt(project, ext, scope)) {
                 val psiFile = psiManager.findFile(vFile) ?: continue
-                collectPairedLiterals(psiFile, eventName, pairedMethods) { element, methodName ->
-                    targets.add(EmitterPsiElementWrapper(element, eventName, methodName))
+                collectPairedCalls(psiFile, eventName, pairedMethods) { callElement, pairedMethod ->
+                    targets.add(EmitterPsiElementWrapper(callElement, eventName, pairedMethod))
                 }
             }
         }
@@ -71,7 +73,7 @@ class EmitterGotoDeclarationHandler : GotoDeclarationHandler {
         return if (sorted.isEmpty()) null else sorted.toTypedArray()
     }
 
-    private fun collectPairedLiterals(
+    private fun collectPairedCalls(
         root: PsiElement,
         eventName: String,
         pairedMethods: Set<String>,
@@ -86,11 +88,12 @@ class EmitterGotoDeclarationHandler : GotoDeclarationHandler {
                 val args = root.children.firstOrNull { it::class.simpleName == "JSArgumentListImpl" }
                 val lit  = args?.children?.firstOrNull { it::class.simpleName == "JSLiteralExpressionImpl" }
                 val ev   = lit?.text?.removeSurrounding("'")?.removeSurrounding("\"")
-                if (ev == eventName && lit != null) {
-                    consumer(lit, name)
+                if (ev == eventName) {
+                    // 導航目標指向整個 call expression，而不只是字串 literal
+                    consumer(root, name)
                 }
             }
         }
-        root.children.forEach { collectPairedLiterals(it, eventName, pairedMethods, consumer) }
+        root.children.forEach { collectPairedCalls(it, eventName, pairedMethods, consumer) }
     }
 }

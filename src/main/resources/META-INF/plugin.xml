@@ -18,6 +18,12 @@
     </actions>
 
     <extensions defaultExtensionNs="com.intellij">
+        <applicationService serviceImplementation="com.github.xinxianwu.emitternavigator.settings.EmitterNavigatorSettings"/>
+        <applicationConfigurable
+                parentId="tools"
+                instance="com.github.xinxianwu.emitternavigator.settings.EmitterNavigatorConfigurable"
+                id="com.github.xinxianwu.emitternavigator.settings"
+                displayName="Emitter Navigation"/>
         <gotoDeclarationHandler implementation="com.github.xinxianwu.emitternavigator.navigation.EmitterGotoDeclarationHandler"/>
         <toolWindow factoryClass="com.github.xinxianwu.emitternavigator.toolWindow.MyToolWindowFactory" id="MyToolWindow"/>
         <postStartupActivity implementation="com.github.xinxianwu.emitternavigator.startup.MyProjectActivity" />
