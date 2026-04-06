@@ -4,6 +4,7 @@ A JetBrains IDE plugin that provides **Go-to-Declaration (F12) navigation** betw
 
 ---
 
+<!-- Plugin description -->
 ## Features
 
 - Press **F12** on an event name string inside an `emit()` or `on()` call to jump to all paired counterparts across the project
@@ -54,3 +55,4 @@ this.on(key, handler);
 // Custom method with event at a specific argument position
 send_io_room(room, "connect", data);   // configured as send_io_room:1
 ```
+<!-- Plugin description end -->
