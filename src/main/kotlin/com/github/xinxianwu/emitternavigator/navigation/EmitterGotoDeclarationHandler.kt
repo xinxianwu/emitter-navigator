@@ -23,10 +23,12 @@ class EmitterGotoDeclarationHandler : GotoDeclarationHandler {
     ): Array<PsiElement>? {
         sourceElement ?: return null
 
-        val literal = sourceElement.parent ?: return null
-        if (literal::class.simpleName != "JSLiteralExpressionImpl") return null
+        // 支援直接字串 literal 或變數 reference（const key = "event"）
+        val expr = sourceElement.parent ?: return null
+        val exprClass = expr::class.simpleName
+        if (exprClass != "JSLiteralExpressionImpl" && exprClass != "JSReferenceExpressionImpl") return null
 
-        val argList = literal.parent ?: return null
+        val argList = expr.parent ?: return null
         if (argList::class.simpleName != "JSArgumentListImpl") return null
 
         val callExpr = argList.parent ?: return null
@@ -45,13 +47,12 @@ class EmitterGotoDeclarationHandler : GotoDeclarationHandler {
         val config = emitConfig ?: onConfig ?: return null
         val isEmit = emitConfig != null
 
-        // 確認游標所在的 literal 符合此方法的 event arg 規則
         val arguments = getArguments(argList)
-        val literalIndex = arguments.indexOf(literal)
-        if (literalIndex !in 0 until MAX_ARG_SCAN) return null
-        if (config.eventArgIndex != null && config.eventArgIndex != literalIndex) return null
+        val exprIndex = arguments.indexOf(expr)
+        if (exprIndex !in 0 until MAX_ARG_SCAN) return null
+        if (config.eventArgIndex != null && config.eventArgIndex != exprIndex) return null
 
-        val eventName = literal.text.removeSurrounding("'").removeSurrounding("\"")
+        val eventName = resolveToEventName(expr) ?: return null
         val pairedConfigs = if (isEmit) onConfigs else emitConfigs
 
         val project = sourceElement.project
@@ -62,13 +63,12 @@ class EmitterGotoDeclarationHandler : GotoDeclarationHandler {
         for (ext in listOf("js", "ts", "jsx", "tsx", "vue")) {
             for (vFile in FilenameIndex.getAllFilesByExt(project, ext, scope)) {
                 val psiFile = psiManager.findFile(vFile) ?: continue
-                collectPairedCalls(psiFile, eventName, pairedConfigs) { callElement, pairedMethod ->
-                    targets.add(EmitterPsiElementWrapper(callElement, eventName, pairedMethod))
+                collectPairedCalls(psiFile, eventName, pairedConfigs) { matchedArg, pairedMethod ->
+                    targets.add(EmitterPsiElementWrapper(matchedArg, eventName, pairedMethod))
                 }
             }
         }
 
-        // 排序：相同檔案的放在最前面，然後按行號排序
         val currentFile = sourceElement.containingFile
         val sorted = targets.sortedWith(compareBy<PsiElement> { element ->
             if (element.containingFile == currentFile) 0 else 1
@@ -89,6 +89,38 @@ class EmitterGotoDeclarationHandler : GotoDeclarationHandler {
         }
     }
 
+    /**
+     * 將參數解析為 event name 字串：
+     * - JSLiteralExpressionImpl: 直接取字串值
+     * - JSReferenceExpressionImpl: 嘗試追蹤到 const/let 宣告的字串 initializer
+     */
+    private fun resolveToEventName(element: PsiElement): String? {
+        return when (element::class.simpleName) {
+            "JSLiteralExpressionImpl" -> element.text.asStringLiteralValue()
+            "JSReferenceExpressionImpl" -> {
+                // 只處理簡單識別符（排除 obj.key 這類 qualified reference）
+                val isSimpleRef = element.children.none { child ->
+                    val n = child::class.simpleName ?: ""
+                    n != "LeafPsiElement" && n != "PsiWhiteSpaceImpl"
+                }
+                if (!isSimpleRef) return null
+
+                val resolved = element.references.firstOrNull()?.resolve() ?: return null
+                // 在變數宣告節點中找字串 literal 的 initializer
+                resolved.children
+                    .firstOrNull { it::class.simpleName == "JSLiteralExpressionImpl" }
+                    ?.text?.asStringLiteralValue()
+            }
+            else -> null
+        }
+    }
+
+    private fun String.asStringLiteralValue(): String? = when {
+        length >= 2 && startsWith("\"") && endsWith("\"") -> substring(1, length - 1)
+        length >= 2 && startsWith("'") && endsWith("'") -> substring(1, length - 1)
+        else -> null
+    }
+
     private fun collectPairedCalls(
         root: PsiElement,
         eventName: String,
@@ -105,22 +137,17 @@ class EmitterGotoDeclarationHandler : GotoDeclarationHandler {
                 val args = root.children.firstOrNull { it::class.simpleName == "JSArgumentListImpl" }
                 val arguments = args?.let { getArguments(it) } ?: emptyList()
 
-                val matchedLiteral = if (config.eventArgIndex != null) {
-                    // 指定位置：只看該 index
+                val matchedArg = if (config.eventArgIndex != null) {
                     arguments.getOrNull(config.eventArgIndex)?.takeIf { arg ->
-                        arg::class.simpleName == "JSLiteralExpressionImpl" &&
-                        arg.text.removeSurrounding("'").removeSurrounding("\"") == eventName
+                        resolveToEventName(arg) == eventName
                     }
                 } else {
-                    // 任意位置：掃描前 N 個參數中第一個匹配的字串 literal
                     arguments.take(MAX_ARG_SCAN).firstOrNull { arg ->
-                        arg::class.simpleName == "JSLiteralExpressionImpl" &&
-                        arg.text.removeSurrounding("'").removeSurrounding("\"") == eventName
+                        resolveToEventName(arg) == eventName
                     }
                 }
 
-                // 導航目標指向字串 literal，游標精準落在 event 字符上
-                if (matchedLiteral != null) consumer(matchedLiteral, name)
+                if (matchedArg != null) consumer(matchedArg, name)
             }
         }
         root.children.forEach { collectPairedCalls(it, eventName, pairedConfigs, consumer) }
