@@ -1,52 +1,62 @@
-# emitter-navigator
+# Emitter Navigator
 
-![Build](https://github.com/xinxianwu/emitter-navigator/workflows/Build/badge.svg)
-[![Version](https://img.shields.io/jetbrains/plugin/v/MARKETPLACE_ID.svg)](https://plugins.jetbrains.com/plugin/MARKETPLACE_ID)
-[![Downloads](https://img.shields.io/jetbrains/plugin/d/MARKETPLACE_ID.svg)](https://plugins.jetbrains.com/plugin/MARKETPLACE_ID)
-
-## Template ToDo list
-- [x] Create a new [IntelliJ Platform Plugin Template][template] project.
-- [ ] Get familiar with the [template documentation][template].
-- [ ] Adjust the [pluginGroup](./gradle.properties) and [pluginName](./gradle.properties), as well as the [id](./src/main/resources/META-INF/plugin.xml) and [sources package](./src/main/kotlin).
-- [ ] Adjust the plugin description in `README` (see [Tips][docs:plugin-description])
-- [ ] Review the [Legal Agreements](https://plugins.jetbrains.com/docs/marketplace/legal-agreements.html?from=IJPluginTemplate).
-- [ ] [Publish a plugin manually](https://plugins.jetbrains.com/docs/intellij/publishing-plugin.html?from=IJPluginTemplate) for the first time.
-- [ ] Set the `MARKETPLACE_ID` in the above README badges. You can obtain it once the plugin is published to JetBrains Marketplace.
-- [ ] Set the [Plugin Signing](https://plugins.jetbrains.com/docs/intellij/plugin-signing.html?from=IJPluginTemplate) related [secrets](https://github.com/JetBrains/intellij-platform-plugin-template#environment-variables).
-- [ ] Set the [Deployment Token](https://plugins.jetbrains.com/docs/marketplace/plugin-upload.html?from=IJPluginTemplate).
-- [ ] Click the <kbd>Watch</kbd> button on the top of the [IntelliJ Platform Plugin Template][template] to be notified about releases containing new features and fixes.
-- [ ] Configure the [CODECOV_TOKEN](https://docs.codecov.com/docs/quick-start) secret for automated test coverage reports on PRs
-
-<!-- Plugin description -->
-This Fancy IntelliJ Platform Plugin is going to be your implementation of the brilliant ideas that you have.
-
-This specific section is a source for the [plugin.xml](/src/main/resources/META-INF/plugin.xml) file which will be extracted by the [Gradle](/build.gradle.kts) during the build process.
-
-To keep everything working, do not remove `<!-- ... -->` sections. 
-<!-- Plugin description end -->
-
-## Installation
-
-- Using the IDE built-in plugin system:
-
-  <kbd>Settings/Preferences</kbd> > <kbd>Plugins</kbd> > <kbd>Marketplace</kbd> > <kbd>Search for "emitter-navigator"</kbd> >
-  <kbd>Install</kbd>
-
-- Using JetBrains Marketplace:
-
-  Go to [JetBrains Marketplace](https://plugins.jetbrains.com/plugin/MARKETPLACE_ID) and install it by clicking the <kbd>Install to ...</kbd> button in case your IDE is running.
-
-  You can also download the [latest release](https://plugins.jetbrains.com/plugin/MARKETPLACE_ID/versions) from JetBrains Marketplace and install it manually using
-  <kbd>Settings/Preferences</kbd> > <kbd>Plugins</kbd> > <kbd>⚙️</kbd> > <kbd>Install plugin from disk...</kbd>
-
-- Manually:
-
-  Download the [latest release](https://github.com/xinxianwu/emitter-navigator/releases/latest) and install it manually using
-  <kbd>Settings/Preferences</kbd> > <kbd>Plugins</kbd> > <kbd>⚙️</kbd> > <kbd>Install plugin from disk...</kbd>
-
+A JetBrains IDE plugin that provides **Go-to-Declaration (F12) navigation** between event emitters and listeners in JavaScript / TypeScript projects.
 
 ---
-Plugin based on the [IntelliJ Platform Plugin Template][template].
 
-[template]: https://github.com/JetBrains/intellij-platform-plugin-template
-[docs:plugin-description]: https://plugins.jetbrains.com/docs/intellij/plugin-user-experience.html#plugin-description-and-presentation
+## Features
+
+- Press **F12** on an event name string inside an `emit()` or `on()` call to jump to all paired counterparts across the project
+- Results are shown in a popup sorted by: current file first, then by line number
+- Supports `.js`, `.ts`, `.jsx`, `.tsx`, and `.vue` files
+- Supports event names passed as variables (`const key = "event"`)
+
+---
+
+## Configuration
+
+Open **Settings → Tools → Emitter Navigation** to customize which methods are treated as emitters or listeners.
+
+### Format
+
+One method per line. Optionally specify the argument index (0-based) where the event name is located:
+
+```
+methodName           # match any string argument (up to 9)
+methodName:argIndex  # match only the argument at the given index
+```
+
+### Examples
+
+| Setting | Matches |
+|---|---|
+| `emit` | `emit("event")`, `this.emit("type", data)` — any string arg |
+| `send_io_room:1` | `send_io_room(room, "event", ...)` — second arg only |
+
+**Default emit methods:** `emit`
+
+**Default on methods:** `on`
+
+---
+
+## Supported Patterns
+
+```js
+// Direct string literal
+socket.emit("connect", data);
+this.on("connect", handler);
+
+// Variable reference (const/let with string initializer)
+const key = "connect";
+socket.emit(key, data);
+this.on(key, handler);
+
+// Custom method with event at a specific argument position
+send_io_room(room, "connect", data);   // configured as send_io_room:1
+```
+
+---
+
+## Context Menu Action
+
+Right-click in any JS/TS file and select **Find Emitter Pairs** to see a summary of all emit/on pairs in the current file.

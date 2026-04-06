@@ -6,7 +6,19 @@
 
     <depends>com.intellij.modules.platform</depends>
 
-    <resource-bundle>messages.MyBundle</resource-bundle>
+    <!-- Plugin description displayed in JetBrains Marketplace -->
+    <!-- Plugin description -->
+    Emitter Navigator provides Go-to-Declaration (F12) navigation between event emitters and listeners in JavaScript/TypeScript projects.
+
+    Press F12 on any event name string inside an emit or on call to jump to all paired counterparts across the project.
+
+    Features:
+    - Navigate between emit() and on() call pairs via F12
+    - Supports js, ts, jsx, tsx, and vue files
+    - Customizable method names via Settings → Tools → Emitter Navigation
+    - Per-method event argument index (e.g. send_io_room:1 for the second argument)
+    - Variable reference support: const key = "event" can be used as the event argument
+    <!-- Plugin description end -->
 
     <actions>
         <action id="EmitterNavigator.FindEmitterPairs"
@@ -25,7 +37,5 @@
                 id="com.github.xinxianwu.emitternavigator.settings"
                 displayName="Emitter Navigation"/>
         <gotoDeclarationHandler implementation="com.github.xinxianwu.emitternavigator.navigation.EmitterGotoDeclarationHandler"/>
-        <toolWindow factoryClass="com.github.xinxianwu.emitternavigator.toolWindow.MyToolWindowFactory" id="MyToolWindow"/>
-        <postStartupActivity implementation="com.github.xinxianwu.emitternavigator.startup.MyProjectActivity" />
     </extensions>
 </idea-plugin>
