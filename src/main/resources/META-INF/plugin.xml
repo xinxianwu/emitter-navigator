@@ -20,15 +20,6 @@
     - Variable reference support: const key = "event" can be used as the event argument
     <!-- Plugin description end -->
 
-    <actions>
-        <action id="EmitterNavigator.FindEmitterPairs"
-                class="com.github.xinxianwu.emitternavigator.actions.FindEmitterPairsAction"
-                text="Find Emitter Pairs"
-                description="Find all emit/on pairs in the current file">
-            <add-to-group group-id="EditorPopupMenu" anchor="last"/>
-        </action>
-    </actions>
-
     <extensions defaultExtensionNs="com.intellij">
         <applicationService serviceImplementation="com.github.xinxianwu.emitternavigator.settings.EmitterNavigatorSettings"/>
         <applicationConfigurable

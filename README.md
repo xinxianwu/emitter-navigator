@@ -54,9 +54,3 @@ this.on(key, handler);
 // Custom method with event at a specific argument position
 send_io_room(room, "connect", data);   // configured as send_io_room:1
 ```
-
----
-
-## Context Menu Action
-
-Right-click in any JS/TS file and select **Find Emitter Pairs** to see a summary of all emit/on pairs in the current file.
