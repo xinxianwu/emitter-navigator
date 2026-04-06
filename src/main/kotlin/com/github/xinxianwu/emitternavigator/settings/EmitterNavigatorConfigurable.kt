@@ -24,9 +24,15 @@ class EmitterNavigatorConfigurable : Configurable {
         reset()
 
         return FormBuilder.createFormBuilder()
-            .addLabeledComponent(JBLabel("Emit methods (one per line):"), JBScrollPane(emitArea))
+            .addLabeledComponent(
+                JBLabel("<html>Emit methods (one per line):<br><small>Format: <code>methodName</code> or <code>methodName:argIndex</code> (0-based)<br>e.g. <code>emit</code>, <code>send_io_room:1</code></small></html>"),
+                JBScrollPane(emitArea)
+            )
             .addVerticalGap(8)
-            .addLabeledComponent(JBLabel("On methods (one per line):"), JBScrollPane(onArea))
+            .addLabeledComponent(
+                JBLabel("<html>On methods (one per line):<br><small>Format: <code>methodName</code> or <code>methodName:argIndex</code> (0-based)<br>e.g. <code>on</code>, <code>listen_room:1</code></small></html>"),
+                JBScrollPane(onArea)
+            )
             .addComponentFillVertically(JPanel(), 0)
             .panel
     }

@@ -1,6 +1,7 @@
 package com.github.xinxianwu.emitternavigator.navigation
 
 import com.github.xinxianwu.emitternavigator.settings.EmitterNavigatorSettings
+import com.github.xinxianwu.emitternavigator.settings.MethodConfig
 import com.intellij.codeInsight.navigation.actions.GotoDeclarationHandler
 import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.fileEditor.FileDocumentManager
@@ -12,8 +13,6 @@ import com.intellij.psi.search.GlobalSearchScope
 class EmitterGotoDeclarationHandler : GotoDeclarationHandler {
 
     private val settings get() = EmitterNavigatorSettings.instance
-    private val emitMethods get() = settings.emitMethodSet
-    private val onMethods   get() = settings.onMethodSet
 
     override fun getGotoDeclarationTargets(
         sourceElement: PsiElement?,
@@ -27,7 +26,6 @@ class EmitterGotoDeclarationHandler : GotoDeclarationHandler {
 
         val argList = literal.parent ?: return null
         if (argList::class.simpleName != "JSArgumentListImpl") return null
-        if (argList.children.firstOrNull { it::class.simpleName == "JSLiteralExpressionImpl" } != literal) return null
 
         val callExpr = argList.parent ?: return null
         if (callExpr::class.simpleName != "JSCallExpressionImpl") return null
@@ -37,12 +35,20 @@ class EmitterGotoDeclarationHandler : GotoDeclarationHandler {
             ?.children?.lastOrNull { it::class.simpleName == "LeafPsiElement" }
             ?.text ?: return null
 
-        val isEmit = methodName in emitMethods
-        val isOn   = methodName in onMethods
-        if (!isEmit && !isOn) return null
+        val emitConfigs = settings.emitMethodConfigs
+        val onConfigs   = settings.onMethodConfigs
+
+        val emitConfig = emitConfigs[methodName]
+        val onConfig   = onConfigs[methodName]
+        val config = emitConfig ?: onConfig ?: return null
+        val isEmit = emitConfig != null
+
+        // 確認 literal 是在正確的 arg index 位置
+        val arguments = getArguments(argList)
+        if (arguments.getOrNull(config.eventArgIndex) != literal) return null
 
         val eventName = literal.text.removeSurrounding("'").removeSurrounding("\"")
-        val pairedMethods = if (isEmit) onMethods else emitMethods
+        val pairedConfigs = if (isEmit) onConfigs else emitConfigs
 
         val project = sourceElement.project
         val scope = GlobalSearchScope.projectScope(project)
@@ -52,7 +58,7 @@ class EmitterGotoDeclarationHandler : GotoDeclarationHandler {
         for (ext in listOf("js", "ts", "jsx", "tsx", "vue")) {
             for (vFile in FilenameIndex.getAllFilesByExt(project, ext, scope)) {
                 val psiFile = psiManager.findFile(vFile) ?: continue
-                collectPairedCalls(psiFile, eventName, pairedMethods) { callElement, pairedMethod ->
+                collectPairedCalls(psiFile, eventName, pairedConfigs) { callElement, pairedMethod ->
                     targets.add(EmitterPsiElementWrapper(callElement, eventName, pairedMethod))
                 }
             }
@@ -61,10 +67,8 @@ class EmitterGotoDeclarationHandler : GotoDeclarationHandler {
         // 排序：相同檔案的放在最前面，然後按行號排序
         val currentFile = sourceElement.containingFile
         val sorted = targets.sortedWith(compareBy<PsiElement> { element ->
-            // 先按是否為當前檔案排序（當前檔案 = 0，其他檔案 = 1）
             if (element.containingFile == currentFile) 0 else 1
         }.thenBy { element ->
-            // 再按行號排序
             val virtualFile = element.containingFile?.virtualFile
             val document = virtualFile?.let { FileDocumentManager.getInstance().getDocument(it) }
             document?.getLineNumber(element.textOffset) ?: Int.MAX_VALUE
@@ -73,10 +77,18 @@ class EmitterGotoDeclarationHandler : GotoDeclarationHandler {
         return if (sorted.isEmpty()) null else sorted.toTypedArray()
     }
 
+    // 取得 argument list 中的實際參數（過濾掉逗號、括號、空白等非表達式節點）
+    private fun getArguments(argList: PsiElement): List<PsiElement> {
+        return argList.children.filter { child ->
+            val name = child::class.simpleName ?: ""
+            name != "LeafPsiElement" && name != "PsiWhiteSpaceImpl"
+        }
+    }
+
     private fun collectPairedCalls(
         root: PsiElement,
         eventName: String,
-        pairedMethods: Set<String>,
+        pairedConfigs: Map<String, MethodConfig>,
         consumer: (PsiElement, String) -> Unit
     ) {
         if (root::class.simpleName == "JSCallExpressionImpl") {
@@ -84,16 +96,18 @@ class EmitterGotoDeclarationHandler : GotoDeclarationHandler {
                 .firstOrNull { it::class.simpleName == "JSReferenceExpressionImpl" }
                 ?.children?.lastOrNull { it::class.simpleName == "LeafPsiElement" }
                 ?.text
-            if (name != null && name in pairedMethods) {
+            val config = name?.let { pairedConfigs[it] }
+            if (config != null) {
                 val args = root.children.firstOrNull { it::class.simpleName == "JSArgumentListImpl" }
-                val lit  = args?.children?.firstOrNull { it::class.simpleName == "JSLiteralExpressionImpl" }
-                val ev   = lit?.text?.removeSurrounding("'")?.removeSurrounding("\"")
-                if (ev == eventName) {
-                    // 導航目標指向整個 call expression，而不只是字串 literal
-                    consumer(root, name)
+                val eventArg = args?.let { getArguments(it).getOrNull(config.eventArgIndex) }
+                if (eventArg != null && eventArg::class.simpleName == "JSLiteralExpressionImpl") {
+                    val ev = eventArg.text.removeSurrounding("'").removeSurrounding("\"")
+                    if (ev == eventName) {
+                        consumer(root, name)
+                    }
                 }
             }
         }
-        root.children.forEach { collectPairedCalls(it, eventName, pairedMethods, consumer) }
+        root.children.forEach { collectPairedCalls(it, eventName, pairedConfigs, consumer) }
     }
 }
