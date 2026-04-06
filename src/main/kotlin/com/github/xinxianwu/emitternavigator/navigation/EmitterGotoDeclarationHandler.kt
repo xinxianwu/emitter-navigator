@@ -10,6 +10,8 @@ import com.intellij.psi.PsiManager
 import com.intellij.psi.search.FilenameIndex
 import com.intellij.psi.search.GlobalSearchScope
 
+private const val MAX_ARG_SCAN = 9
+
 class EmitterGotoDeclarationHandler : GotoDeclarationHandler {
 
     private val settings get() = EmitterNavigatorSettings.instance
@@ -43,9 +45,11 @@ class EmitterGotoDeclarationHandler : GotoDeclarationHandler {
         val config = emitConfig ?: onConfig ?: return null
         val isEmit = emitConfig != null
 
-        // 確認 literal 是在正確的 arg index 位置
+        // 確認游標所在的 literal 符合此方法的 event arg 規則
         val arguments = getArguments(argList)
-        if (arguments.getOrNull(config.eventArgIndex) != literal) return null
+        val literalIndex = arguments.indexOf(literal)
+        if (literalIndex !in 0 until MAX_ARG_SCAN) return null
+        if (config.eventArgIndex != null && config.eventArgIndex != literalIndex) return null
 
         val eventName = literal.text.removeSurrounding("'").removeSurrounding("\"")
         val pairedConfigs = if (isEmit) onConfigs else emitConfigs
@@ -99,13 +103,23 @@ class EmitterGotoDeclarationHandler : GotoDeclarationHandler {
             val config = name?.let { pairedConfigs[it] }
             if (config != null) {
                 val args = root.children.firstOrNull { it::class.simpleName == "JSArgumentListImpl" }
-                val eventArg = args?.let { getArguments(it).getOrNull(config.eventArgIndex) }
-                if (eventArg != null && eventArg::class.simpleName == "JSLiteralExpressionImpl") {
-                    val ev = eventArg.text.removeSurrounding("'").removeSurrounding("\"")
-                    if (ev == eventName) {
-                        consumer(root, name)
+                val arguments = args?.let { getArguments(it) } ?: emptyList()
+
+                val matched = if (config.eventArgIndex != null) {
+                    // 指定位置：只看該 index
+                    val eventArg = arguments.getOrNull(config.eventArgIndex)
+                    eventArg != null &&
+                    eventArg::class.simpleName == "JSLiteralExpressionImpl" &&
+                    eventArg.text.removeSurrounding("'").removeSurrounding("\"") == eventName
+                } else {
+                    // 任意位置：掃描前 N 個參數中是否有匹配的字串 literal
+                    arguments.take(MAX_ARG_SCAN).any { arg ->
+                        arg::class.simpleName == "JSLiteralExpressionImpl" &&
+                        arg.text.removeSurrounding("'").removeSurrounding("\"") == eventName
                     }
                 }
+
+                if (matched) consumer(root, name)
             }
         }
         root.children.forEach { collectPairedCalls(it, eventName, pairedConfigs, consumer) }

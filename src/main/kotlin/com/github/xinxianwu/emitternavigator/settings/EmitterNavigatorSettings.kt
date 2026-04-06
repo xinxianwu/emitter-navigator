@@ -5,7 +5,9 @@ import com.intellij.openapi.components.PersistentStateComponent
 import com.intellij.openapi.components.State
 import com.intellij.openapi.components.Storage
 
-data class MethodConfig(val name: String, val eventArgIndex: Int = 0)
+// eventArgIndex = null 表示匹配前 9 個參數中任意字串（未指定位置時的預設行為）
+// eventArgIndex = N   表示只匹配第 N 個參數（0-based）
+data class MethodConfig(val name: String, val eventArgIndex: Int?)
 
 @State(
     name = "EmitterNavigatorSettings",
@@ -45,16 +47,16 @@ class EmitterNavigatorSettings : PersistentStateComponent<EmitterNavigatorSettin
             get() = ApplicationManager.getApplication().getService(EmitterNavigatorSettings::class.java)
 
         fun parseMethodConfigs(text: String): Map<String, MethodConfig> {
-            return text.lines()
-                .mapNotNull { line ->
-                    val trimmed = line.trim()
-                    if (trimmed.isEmpty()) return@mapNotNull null
-                    val parts = trimmed.split(":")
-                    val name = parts[0].trim()
-                    val index = parts.getOrNull(1)?.trim()?.toIntOrNull() ?: 0
-                    if (name.isNotEmpty()) name to MethodConfig(name, index) else null
-                }
-                .toMap()
+            return text.lines().mapNotNull { line ->
+                val trimmed = line.trim()
+                if (trimmed.isEmpty()) return@mapNotNull null
+                val parts = trimmed.split(":")
+                val name = parts[0].trim()
+                if (name.isEmpty()) return@mapNotNull null
+                // 有指定 index → 固定位置；沒有 → null 表示任意位置
+                val index = parts.getOrNull(1)?.trim()?.toIntOrNull()
+                name to MethodConfig(name, index)
+            }.toMap()
         }
     }
 }
