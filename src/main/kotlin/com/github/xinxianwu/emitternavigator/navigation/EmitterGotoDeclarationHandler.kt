@@ -105,21 +105,22 @@ class EmitterGotoDeclarationHandler : GotoDeclarationHandler {
                 val args = root.children.firstOrNull { it::class.simpleName == "JSArgumentListImpl" }
                 val arguments = args?.let { getArguments(it) } ?: emptyList()
 
-                val matched = if (config.eventArgIndex != null) {
+                val matchedLiteral = if (config.eventArgIndex != null) {
                     // 指定位置：只看該 index
-                    val eventArg = arguments.getOrNull(config.eventArgIndex)
-                    eventArg != null &&
-                    eventArg::class.simpleName == "JSLiteralExpressionImpl" &&
-                    eventArg.text.removeSurrounding("'").removeSurrounding("\"") == eventName
+                    arguments.getOrNull(config.eventArgIndex)?.takeIf { arg ->
+                        arg::class.simpleName == "JSLiteralExpressionImpl" &&
+                        arg.text.removeSurrounding("'").removeSurrounding("\"") == eventName
+                    }
                 } else {
-                    // 任意位置：掃描前 N 個參數中是否有匹配的字串 literal
-                    arguments.take(MAX_ARG_SCAN).any { arg ->
+                    // 任意位置：掃描前 N 個參數中第一個匹配的字串 literal
+                    arguments.take(MAX_ARG_SCAN).firstOrNull { arg ->
                         arg::class.simpleName == "JSLiteralExpressionImpl" &&
                         arg.text.removeSurrounding("'").removeSurrounding("\"") == eventName
                     }
                 }
 
-                if (matched) consumer(root, name)
+                // 導航目標指向字串 literal，游標精準落在 event 字符上
+                if (matchedLiteral != null) consumer(matchedLiteral, name)
             }
         }
         root.children.forEach { collectPairedCalls(it, eventName, pairedConfigs, consumer) }
